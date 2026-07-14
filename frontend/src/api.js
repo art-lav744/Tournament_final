@@ -33,6 +33,9 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  health() {
+    return request("/health");
+  },
   createUser(payload) {
     return request("/users", { method: "POST", body: JSON.stringify(payload) });
   },
@@ -57,6 +60,12 @@ export const api = {
       body: JSON.stringify({ enabled }),
     });
   },
+  setLocationVisibility(userId, visibility) {
+    return request(`/users/${userId}/location-visibility`, {
+      method: "PUT",
+      body: JSON.stringify({ visibility }),
+    });
+  },
   updateLocation(userId, payload) {
     return request(`/users/${userId}/location`, {
       method: "PUT",
@@ -68,6 +77,9 @@ export const api = {
   },
   getFriendLocations(userId) {
     return request(`/users/${userId}/friends/locations`);
+  },
+  getVisibleLocations(userId) {
+    return request(`/users/${userId}/visible-locations`);
   },
   sendFriendRequest(userId, friendCode) {
     return request(`/users/${userId}/friends/request`, {
@@ -83,6 +95,9 @@ export const api = {
 
   createActivity(payload) {
     return request("/activities", { method: "POST", body: JSON.stringify(payload) });
+  },
+  getPublicActivities() {
+    return request("/activities/public/list");
   },
   getActivity(code) {
     return request(`/activities/${code}`);

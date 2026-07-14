@@ -144,3 +144,50 @@ cloudflared tunnel --url http://localhost:5173
 - `Секретний код профілю` — приватний, використовується для підключення того самого профілю на іншому пристрої.
 
 На другому пристрої відкрийте `Профіль` → `Відкрити існуючий профіль` і введіть секретний код.
+
+## Latest update: map privacy and event visibility
+
+- Administrative region/state/province labels are hidden from MapLibre maps.
+- Events can be `Public` or `Private`.
+  - Public events appear in the public events list.
+  - Private events do not appear in discovery and are joined by code.
+- Location visibility has three modes:
+  - `none`: location stays private and is not uploaded;
+  - `friends`: accepted friends can see the live location;
+  - `everyone`: other users can also see the live location.
+- Non-host devices opened through an insecure `http://LAN-IP:5173` URL no longer receive an immediate blocking GPS error. The rest of the app remains usable.
+- Browser geolocation still requires a secure context for real GPS access on Android. For multi-device GPS testing use the same HTTPS frontend URL for all devices (for example an HTTPS deployment or tunnel).
+
+
+## Recommended launch commands
+
+### PC development
+
+From the project root:
+
+```powershell
+.\start-dev.ps1
+```
+
+This starts FastAPI, waits until `/health` responds, and then starts Vite. Do not open the app through a LAN IP unless you specifically need another device.
+
+### Android / multi-device GPS testing
+
+Install Cloudflare Tunnel once:
+
+```powershell
+winget install --id Cloudflare.cloudflared
+```
+
+Then run:
+
+```powershell
+.\start-android.ps1
+```
+
+Open the generated `https://...trycloudflare.com` URL on every Android device. The frontend, `/api` proxy and FastAPI backend then share one public HTTPS entry point, which is required for browser geolocation on non-localhost devices.
+
+### Important diagnostic distinction
+
+- `GPS needs HTTPS` means the page is opened through insecure `http://192.168...` and the browser will not expose geolocation.
+- `Backend unavailable` means FastAPI on port `8000` is not running or crashed. The map can still work locally, but profiles, friends, events and shared location cannot sync until the backend reconnects.

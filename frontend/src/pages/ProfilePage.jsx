@@ -11,6 +11,29 @@ function initials(name = "?") {
   return name.trim().slice(0, 2).toUpperCase();
 }
 
+const LOCATION_OPTIONS = [
+  {
+    value: "none",
+    title: "Ніхто",
+    description: "Позиція не надсилається на сервер.",
+  },
+  {
+    value: "friends",
+    title: "Друзі",
+    description: "Вашу актуальну позицію бачать лише прийняті друзі.",
+  },
+  {
+    value: "everyone",
+    title: "Усі",
+    description: "Вашу актуальну позицію можуть бачити й користувачі не з друзів.",
+  },
+];
+
+function currentVisibility(user) {
+  if (!user) return "none";
+  return user.location_visibility || (user.location_sharing_enabled ? "friends" : "none");
+}
+
 export default function ProfilePage() {
   const [user, setUser] = useState(null);
   const [name, setName] = useState("");
@@ -19,6 +42,7 @@ export default function ProfilePage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [connecting, setConnecting] = useState(false);
+  const [savingVisibility, setSavingVisibility] = useState(false);
 
   function applyProfile(profile) {
     setUser(profile);
@@ -68,23 +92,21 @@ export default function ProfilePage() {
     }
   }
 
-  async function toggleLocationSharing() {
-    if (!user) return;
+  async function changeLocationVisibility(visibility) {
+    if (!user || savingVisibility || visibility === currentVisibility(user)) return;
 
     setError("");
+    setMessage("");
+    setSavingVisibility(true);
     try {
-      const updated = await api.setLocationSharing(
-        user.id,
-        !user.location_sharing_enabled
-      );
+      const updated = await api.setLocationVisibility(user.id, visibility);
       applyProfile(updated);
-      setMessage(
-        updated.location_sharing_enabled
-          ? "Передачу геолокації увімкнено"
-          : "Передачу геолокації вимкнено"
-      );
+      const option = LOCATION_OPTIONS.find((item) => item.value === visibility);
+      setMessage(`Видимість геолокації: ${option?.title || visibility}`);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSavingVisibility(false);
     }
   }
 
@@ -96,6 +118,8 @@ export default function ProfilePage() {
       setMessage(fallbackMessage);
     }
   }
+
+  const visibility = currentVisibility(user);
 
   return (
     <main className="main-tab-page">
@@ -136,19 +160,30 @@ export default function ProfilePage() {
               <small>Введіть його на іншому пристрої. Не передавайте стороннім.</small>
             </button>
 
-            <section className="settings-card">
-              <div>
-                <strong>Ділитися геолокацією</strong>
-                <span>Лише прийняті друзі бачать вашу актуальну позицію.</span>
+            <section className="settings-card location-visibility-card">
+              <div className="location-visibility-card__heading">
+                <strong>Хто бачить мою геолокацію</strong>
+                <span>Позиція на карті оновлюється лише коли вебзастосунок активний.</span>
               </div>
-              <button
-                type="button"
-                className={`toggle${user.location_sharing_enabled ? " is-on" : ""}`}
-                onClick={toggleLocationSharing}
-                aria-pressed={user.location_sharing_enabled}
-              >
-                <span />
-              </button>
+
+              <div className="segmented-setting" role="radiogroup" aria-label="Видимість геолокації">
+                {LOCATION_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={visibility === option.value}
+                    className={`segmented-setting__option${
+                      visibility === option.value ? " is-active" : ""
+                    }`}
+                    onClick={() => changeLocationVisibility(option.value)}
+                    disabled={savingVisibility}
+                  >
+                    <strong>{option.title}</strong>
+                    <span>{option.description}</span>
+                  </button>
+                ))}
+              </div>
             </section>
 
             <form className="profile-form" onSubmit={saveProfile}>

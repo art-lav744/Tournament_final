@@ -76,6 +76,7 @@ export default function RoomPage() {
               <strong>1</strong>
             </div>
             {isHost && <span className="badge">Організатор</span>}
+            <span className="badge">{activity.is_public ? "Public" : "Private"}</span>
           </div>
 
           {activity.description && <p className="room-sheet__hint">{activity.description}</p>}

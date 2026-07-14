@@ -12,6 +12,14 @@ function safeSetPaint(map, layerId, property, value) {
   }
 }
 
+function safeSetLayout(map, layerId, property, value) {
+  try {
+    map.setLayoutProperty(layerId, property, value);
+  } catch {
+    // Ignore style layers that do not expose this layout property.
+  }
+}
+
 function applyBleakStyle(map) {
   const layers = map.getStyle()?.layers || [];
 
@@ -77,6 +85,37 @@ function applyBleakStyle(map) {
     }
 
     if (layer.type === "symbol") {
+      // Keep the map visually clean: remove geographic place labels such as
+      // countries, regions, cities, suburbs and neighbourhoods. Road/street
+      // labels stay visible because they come from transportation-name layers.
+      const isPlaceLabel =
+        sourceLayer === "place" ||
+        sourceLayer.includes("place") ||
+        key.includes("place_") ||
+        key.includes("place-") ||
+        key.includes("country") ||
+        key.includes("state") ||
+        key.includes("province") ||
+        key.includes("region") ||
+        key.includes("admin1") ||
+        key.includes("city_label") ||
+        key.includes("city-label") ||
+        key.includes("town_label") ||
+        key.includes("town-label") ||
+        key.includes("village_label") ||
+        key.includes("village-label") ||
+        key.includes("suburb") ||
+        key.includes("neighbourhood") ||
+        key.includes("neighborhood") ||
+        key.includes("locality") ||
+        key.includes("district_label") ||
+        key.includes("district-label");
+
+      if (isPlaceLabel) {
+        safeSetLayout(map, layer.id, "visibility", "none");
+        continue;
+      }
+
       safeSetPaint(map, layer.id, "text-color", "#aeb5bb");
       safeSetPaint(map, layer.id, "text-halo-color", "#07090b");
       safeSetPaint(map, layer.id, "text-halo-width", 1.25);
@@ -116,7 +155,7 @@ function createEventMarker(event) {
   const popup = new maplibregl.Popup({ offset: 22 }).setHTML(
     `<div class="map-popup"><strong>${escapeHtml(event.title)}</strong><p>${escapeHtml(
       event.description || `Код: ${event.code}`
-    )}</p><a class="map-popup__link" href="/room/${event.code}">Відкрити подію</a></div>`
+    )}</p><small>${event.is_public ? "Public" : "Private"}</small><br><a class="map-popup__link" href="/room/${event.code}">Відкрити подію</a></div>`
   );
 
   return new maplibregl.Marker({ element, anchor: "center" })
@@ -388,6 +427,11 @@ export default function MapLibreMap({
       });
       return;
     }
+
+    // On a LAN HTTP URL the browser blocks Geolocation. The status card in
+    // MapPage already explains that HTTPS is required, so do not show a second
+    // duplicate error toast when the locate button is pressed.
+    if (!window.isSecureContext) return;
 
     if (!navigator.geolocation) {
       setLocationError("Геолокація не підтримується цим браузером.");

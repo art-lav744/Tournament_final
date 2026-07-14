@@ -27,6 +27,7 @@ from .models import (
     Friendship,
     LocationSharingUpdate,
     LocationUpdate,
+    LocationVisibilityUpdate,
     Participant,
     ParticipantJoin,
     ParticipantRead,
@@ -142,6 +143,8 @@ def create_user(data: UserCreate, session: Session = Depends(get_session)):
         photo_url=(data.photo_url or "").strip() or None,
         friend_code=friend_code,
         profile_code=generate_profile_code(session),
+        location_visibility="friends",
+        location_sharing_enabled=True,
     )
     session.add(user)
     session.commit()
@@ -192,7 +195,7 @@ def update_user_location(
     session: Session = Depends(get_session),
 ):
     user = get_user_or_404(user_id, session)
-    if not user.location_sharing_enabled:
+    if user.location_visibility == "none" or not user.location_sharing_enabled:
         raise HTTPException(status_code=409, detail="Location sharing is disabled")
 
     location = session.get(UserLocation, user_id)
@@ -235,8 +238,32 @@ def set_location_sharing(
     data: LocationSharingUpdate,
     session: Session = Depends(get_session),
 ):
+    # Backward-compatible endpoint used by older clients.
     user = get_user_or_404(user_id, session)
     user.location_sharing_enabled = data.enabled
+    user.location_visibility = "friends" if data.enabled else "none"
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
+
+
+@app.put("/users/{user_id}/location-visibility", response_model=UserRead)
+def set_location_visibility(
+    user_id: int,
+    data: LocationVisibilityUpdate,
+    session: Session = Depends(get_session),
+):
+    user = get_user_or_404(user_id, session)
+    visibility = data.visibility.strip().lower()
+    if visibility not in {"none", "friends", "everyone"}:
+        raise HTTPException(
+            status_code=422,
+            detail="visibility must be one of: none, friends, everyone",
+        )
+
+    user.location_visibility = visibility
+    user.location_sharing_enabled = visibility != "none"
     session.add(user)
     session.commit()
     session.refresh(user)
@@ -404,7 +431,12 @@ def list_friend_locations(user_id: int, session: Session = Depends(get_session))
         friend = session.get(User, friend_id)
         location = session.get(UserLocation, friend_id)
 
-        if friend is None or location is None or not friend.location_sharing_enabled:
+        if (
+            friend is None
+            or location is None
+            or not friend.location_sharing_enabled
+            or friend.location_visibility not in {"friends", "everyone"}
+        ):
             continue
 
         age = max(
@@ -434,7 +466,79 @@ def list_friend_locations(user_id: int, session: Session = Depends(get_session))
     return result
 
 
-# -------------------- Activities --------------------
+@app.get(
+    "/users/{user_id}/visible-locations",
+    response_model=list[FriendLocationRead],
+)
+def list_visible_locations(user_id: int, session: Session = Depends(get_session)):
+    """Return live locations visible to this user.
+
+    Accepted friends are visible when they share with friends or everyone.
+    Non-friends are visible only when they explicitly share with everyone.
+    """
+    viewer = get_user_or_404(user_id, session)
+    friendships = session.exec(
+        select(Friendship).where(
+            (Friendship.status == "accepted")
+            & or_(
+                Friendship.requester_id == viewer.id,
+                Friendship.addressee_id == viewer.id,
+            )
+        )
+    ).all()
+
+    friend_ids: set[int] = set()
+    for friendship in friendships:
+        friend_ids.add(
+            friendship.addressee_id
+            if friendship.requester_id == viewer.id
+            else friendship.requester_id
+        )
+
+    now = utc_now()
+    result: list[FriendLocationRead] = []
+    users = session.exec(select(User).where(User.id != viewer.id)).all()
+
+    for candidate in users:
+        visibility = candidate.location_visibility or (
+            "friends" if candidate.location_sharing_enabled else "none"
+        )
+        is_friend = candidate.id in friend_ids
+        can_see = visibility == "everyone" or (
+            visibility == "friends" and is_friend
+        )
+        if not can_see or not candidate.location_sharing_enabled:
+            continue
+
+        location = session.get(UserLocation, candidate.id)
+        if location is None:
+            continue
+
+        age = max(
+            0,
+            int((now - normalized_utc(location.updated_at)).total_seconds()),
+        )
+        if age > 300:
+            continue
+
+        presence = "online" if age <= 20 else "stale" if age <= 60 else "offline"
+        result.append(
+            FriendLocationRead(
+                user_id=candidate.id,
+                name=candidate.name,
+                photo_url=candidate.photo_url,
+                latitude=location.latitude,
+                longitude=location.longitude,
+                accuracy=location.accuracy,
+                updated_at=location.updated_at,
+                age_seconds=age,
+                presence=presence,
+            )
+        )
+
+    return result
+
+
 # -------------------- Activities / events --------------------
 
 def activity_to_read(activity: Activity, session: Session) -> ActivityRead:
@@ -445,6 +549,7 @@ def activity_to_read(activity: Activity, session: Session) -> ActivityRead:
         title=activity.title,
         description=activity.description,
         code=activity.code,
+        is_public=activity.is_public,
         created_at=activity.created_at,
         host_user_id=owner.user_id if owner else None,
         latitude=location.latitude if location else None,
@@ -478,6 +583,7 @@ def create_activity(data: ActivityCreate, session: Session = Depends(get_session
     activity = Activity(
         title=data.title.strip(),
         description=data.description.strip(),
+        is_public=data.is_public,
         code=generate_unique_code(
             session,
             Activity,
@@ -501,6 +607,16 @@ def create_activity(data: ActivityCreate, session: Session = Depends(get_session
     session.add(EventMember(activity_id=activity.id, user_id=user.id))
     session.commit()
     return activity_to_read(activity, session)
+
+
+@app.get("/activities/public/list", response_model=list[ActivityRead])
+def list_public_activities(session: Session = Depends(get_session)):
+    activities = session.exec(
+        select(Activity)
+        .where(Activity.is_public == True)
+        .order_by(Activity.created_at.desc())
+    ).all()
+    return [activity_to_read(activity, session) for activity in activities]
 
 
 @app.get("/activities/{code}", response_model=ActivityRead)

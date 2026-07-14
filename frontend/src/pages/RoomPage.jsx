@@ -1,30 +1,26 @@
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { api } from "../api.js";
-import CheckpointMap from "../components/CheckpointMap.jsx";
+import BottomNav from "../components/BottomNav.jsx";
+import MapLibreMap from "../components/MapLibreMap.jsx";
+import { ensureCurrentUser } from "../userSession.js";
 
 export default function RoomPage() {
   const { code } = useParams();
-
+  const [user, setUser] = useState(null);
   const [activity, setActivity] = useState(null);
   const [participants, setParticipants] = useState([]);
-  const [checkpoints, setCheckpoints] = useState([]);
   const [error, setError] = useState("");
-
-  const isHost = localStorage.getItem(`is_host_${code}`) === "true";
+  const [panelOpen, setPanelOpen] = useState(true);
 
   const loadRoom = useCallback(async () => {
     try {
-      const [activityData, participantsData, checkpointsData] =
-        await Promise.all([
-          api.getActivity(code),
-          api.getParticipants(code),
-          api.getCheckpoints(code),
-        ]);
-
+      const [activityData, participantsData] = await Promise.all([
+        api.getActivity(code),
+        api.getParticipants(code),
+      ]);
       setActivity(activityData);
       setParticipants(participantsData);
-      setCheckpoints(checkpointsData);
       setError("");
     } catch (err) {
       setError(err.message);
@@ -32,70 +28,72 @@ export default function RoomPage() {
   }, [code]);
 
   useEffect(() => {
+    ensureCurrentUser().then(setUser).catch((err) => setError(err.message));
     loadRoom();
-
     const intervalId = window.setInterval(loadRoom, 5000);
     return () => window.clearInterval(intervalId);
   }, [loadRoom]);
 
-  async function handleCreateCheckpoint(payload) {
-    try {
-      await api.createCheckpoint(code, payload);
-      await loadRoom();
-    } catch (err) {
-      setError(err.message);
-    }
-  }
+  const isHost = Boolean(user && activity && activity.host_user_id === user.id);
 
   if (error && !activity) {
-    return <p className="error">{error}</p>;
+    return <main className="form-page"><p className="error">{error}</p></main>;
   }
 
   if (!activity) {
-    return <p>Завантаження...</p>;
+    return <main className="loading-screen">Завантаження...</main>;
   }
 
   return (
-    <div className="room-layout">
-      <section className="card">
-        <div className="room-heading">
-          <div>
-            <div className="eyebrow">Код кімнати</div>
-            <div className="room-code">{activity.code}</div>
+    <main className="room-map-page">
+      <MapLibreMap eventPins={[activity]} enableLocation={false} />
+
+      <div className="room-map-header">
+        <Link to="/events" className="room-map-header__back" aria-label="Назад">←</Link>
+        <div className="room-map-header__title">
+          <strong>{activity.title}</strong>
+          <span>Код: {activity.code}</span>
+        </div>
+        <button
+          className="room-map-header__toggle"
+          type="button"
+          onClick={() => setPanelOpen((value) => !value)}
+        >
+          {panelOpen ? "×" : "i"}
+        </button>
+      </div>
+
+      {panelOpen && (
+        <aside className="room-sheet event-room-sheet">
+          <div className="room-sheet__handle" />
+          <div className="room-sheet__meta">
+            <div>
+              <span className="eyebrow">Учасники</span>
+              <strong>{participants.length}</strong>
+            </div>
+            <div>
+              <span className="eyebrow">Точок події</span>
+              <strong>1</strong>
+            </div>
+            {isHost && <span className="badge">Організатор</span>}
           </div>
 
-          {isHost && <span className="badge">Організатор</span>}
-        </div>
+          {activity.description && <p className="room-sheet__hint">{activity.description}</p>}
 
-        <h1>{activity.title}</h1>
-        {activity.description && (
-          <p className="muted">{activity.description}</p>
-        )}
-      </section>
+          <div className="participant-chips">
+            {participants.map((participant) => (
+              <span key={participant.user_id} className="participant-chip participant-chip--user">
+                {participant.photo_url ? <img src={participant.photo_url} alt="" /> : null}
+                {participant.name}{participant.is_host ? " · host" : ""}
+              </span>
+            ))}
+          </div>
 
-      <section className="card">
-        <h2>Учасники ({participants.length})</h2>
-        <ul className="participant-list">
-          {participants.map((participant) => (
-            <li key={participant.id}>
-              <span>{participant.name}</span>
-              {participant.is_host && <span className="badge">Host</span>}
-            </li>
-          ))}
-        </ul>
-      </section>
+          {error && <p className="error">{error}</p>}
+        </aside>
+      )}
 
-      <section className="card map-card">
-        <h2>Маршрут / контрольні точки</h2>
-
-        <CheckpointMap
-          checkpoints={checkpoints}
-          canEdit={isHost}
-          onCreateCheckpoint={handleCreateCheckpoint}
-        />
-
-        {error && <p className="error">{error}</p>}
-      </section>
-    </div>
+      <BottomNav />
+    </main>
   );
 }

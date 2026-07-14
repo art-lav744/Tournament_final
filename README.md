@@ -1,125 +1,146 @@
-# Outdoor Activity Hackathon Starter
+# Outdoor Together — Hackathon Starter
 
-Стартова кодова база для вебзастосунку:
+Stack:
 
-- Frontend: React + Vite
-- Backend: FastAPI
-- Database: SQLite + SQLModel
-- Map: Leaflet + React-Leaflet
-- API: REST / JSON
+- React + Vite
+- FastAPI
+- SQLite + SQLModel
+- MapLibre GL JS
+- OpenFreeMap vector style
+- Browser Geolocation API
 
-## Що вже працює
+## Implemented
 
-- створення активності;
-- автоматична генерація коду кімнати;
-- приєднання учасника за кодом;
-- перегляд учасників;
-- додавання контрольної точки кліком по карті;
-- перегляд контрольних точок на карті;
-- збереження даних у SQLite;
-- Swagger/OpenAPI документація FastAPI.
+- full-screen bleak/dark MapLibre map;
+- high-contrast roads;
+- mobile-first bottom navigation;
+- activities, room codes, participants and checkpoints;
+- persistent user profiles;
+- optional profile photo URL;
+- unique friend codes;
+- friend requests and acceptance;
+- accepted-friend list;
+- location-sharing privacy toggle;
+- `navigator.geolocation.watchPosition()` on the map page;
+- throttled location upload every 5 seconds;
+- friend-location polling every 3 seconds;
+- live MapLibre avatar markers;
+- pulsing rings around the current user's photo;
+- stale/offline visual state;
+- locations older than 5 minutes are not returned to friends.
 
----
-
-## 1. Запуск backend
-
-Потрібен Python 3.11+.
-
-### Windows PowerShell
+## Run backend
 
 ```powershell
 cd backend
 python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m uvicorn app.main:app --reload
 ```
 
-Backend:
-- API: http://127.0.0.1:8000
-- Swagger: http://127.0.0.1:8000/docs
+API docs:
 
----
+```text
+http://127.0.0.1:8000/docs
+```
 
-## 2. Запуск frontend
+## Run frontend
 
-Потрібен Node.js.
-
-```bash
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
 
 Frontend:
-- http://localhost:5173
-
-За замовчуванням frontend звертається до:
 
 ```text
-http://127.0.0.1:8000
+http://localhost:5173
 ```
 
-Щоб змінити адресу backend, створіть `frontend/.env`:
+For a phone on the same Wi-Fi, set the backend URL in `frontend/.env`:
 
 ```env
-VITE_API_URL=http://192.168.1.100:8000
+VITE_API_URL=http://YOUR_PC_LAN_IP:8000
 ```
 
-Це знадобиться, якщо тестуєте сайт на телефоні в локальній мережі.
+Run Vite with the existing `host: true` setting and open:
+
+```text
+http://YOUR_PC_LAN_IP:5173
+```
+
+## Live-location architecture
+
+```text
+Browser watchPosition
+      ↓
+PUT /users/{id}/location   (max once / 5 sec)
+      ↓
+SQLite UserLocation
+      ↓
+GET /users/{id}/friends/locations   (every 3 sec)
+      ↓
+MapLibre marker.setLngLat(...)
+```
+
+Only accepted friends are eligible to receive a user's location, and only while `location_sharing_enabled=true`.
+
+## Important hackathon limitation
+
+The MVP stores the local `user_id` in `localStorage`; it does not yet use real authentication or signed access tokens. This is acceptable for a controlled demo, but production use of real location data requires authentication, authorization, HTTPS, abuse protection, and stricter CORS rules.
+
+## Test with two users on one PC
+
+Use two separate browser profiles or one normal window plus an Incognito window. Each profile receives a different local user identity. Exchange the 8-character friend codes, accept the request, enable location sharing and open the Map tab.
 
 ---
 
-## Основний сценарій MVP
+## Важливо для iPhone і тестування на кількох пристроях
 
-1. Організатор відкриває сайт.
-2. Створює активність.
-3. Отримує код кімнати.
-4. Інші учасники вводять код та ім'я.
-5. У кімнаті видно учасників.
-6. Організатор додає контрольні точки на карті.
-7. Команда проходить активність.
+Frontend тепер використовує відносний `/api`, а Vite проксіює його на локальний FastAPI `127.0.0.1:8000`.
+Тому телефони більше не намагаються звертатися до `127.0.0.1` на самому телефоні.
 
----
+### Локальна мережа
 
-## Розподіл роботи для 4 людей
+1. Запустіть backend:
 
-### Frontend
-- сторінки;
-- компоненти;
-- responsive/mobile-first;
-- інтеграція з API.
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+python -m uvicorn app.main:app --reload
+```
 
-### Backend
-- FastAPI endpoints;
-- бізнес-логіка;
-- валідація.
+2. В іншому PowerShell запустіть frontend:
 
-### Data / Logic
-- SQLModel;
-- моделі;
-- прогрес;
-- GPS-перевірка.
+```powershell
+cd frontend
+npm install
+npm run dev
+```
 
-### Product / QA / Integration
-- user flow;
-- тестування на телефонах;
-- README;
-- презентація;
-- AI-log;
-- GitHub Issues.
+Інші пристрої в LAN можуть відкрити адресу `http://IP_ВАШОГО_ПК:5173`.
+Профілі, друзі й заявки працюватимуть через спільний backend завдяки `/api` proxy.
 
----
+### Геолокація на iPhone
 
-## Що додавати далі
+Для Geolocation API на iPhone потрібен secure context, практично — HTTPS. Звичайний `http://192.168.x.x:5173` не підходить.
+Для швидкого demo можна відкрити один HTTPS tunnel саме на Vite (порт 5173); `/api` піде через той самий tunnel і Vite proxy у FastAPI.
 
-У такому порядку:
+Наприклад, якщо встановлено `cloudflared`:
 
-1. Позначення checkpoint як виконаного.
-2. Перевірка відстані до checkpoint через GPS.
-3. Екран фінішу.
-4. Polling учасників/прогресу раз на 3–5 секунд.
-5. PWA.
-6. Лише потім — фото, QR, realtime або рейтинг.
+```powershell
+cloudflared tunnel --url http://localhost:5173
+```
 
-Не починайте зі складної авторизації, WebSocket чи Redux.
+Відкрийте видану `https://...trycloudflare.com` адресу на iPhone. Backend окремо в Internet виставляти не потрібно.
+
+### Той самий профіль на іншому пристрої
+
+У `Профіль` є два коди:
+
+- `Код друга` — публічний, ним обмінюються для заявок у друзі.
+- `Секретний код профілю` — приватний, використовується для підключення того самого профілю на іншому пристрої.
+
+На другому пристрої відкрийте `Профіль` → `Відкрити існуючий профіль` і введіть секретний код.

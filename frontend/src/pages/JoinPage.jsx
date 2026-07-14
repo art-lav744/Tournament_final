@@ -1,24 +1,29 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api.js";
+import { ensureCurrentUser } from "../userSession.js";
 
 export default function JoinPage() {
   const navigate = useNavigate();
-  const [name, setName] = useState("");
+  const [user, setUser] = useState(null);
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    ensureCurrentUser().then(setUser).catch((err) => setError(err.message));
+  }, []);
+
   async function handleSubmit(event) {
     event.preventDefault();
     setError("");
-    setLoading(true);
+    if (!user) return;
 
+    setLoading(true);
     const normalizedCode = code.trim().toUpperCase();
 
     try {
-      await api.joinActivity(normalizedCode, { name: name.trim() });
-      localStorage.setItem("player_name", name.trim());
+      await api.joinActivity(normalizedCode, user.id);
       navigate(`/room/${normalizedCode}`);
     } catch (err) {
       setError(err.message);
@@ -28,38 +33,35 @@ export default function JoinPage() {
   }
 
   return (
-    <section className="card">
-      <h1>Приєднатися</h1>
+    <main className="form-page">
+      <Link className="back-link" to="/events">← Назад до подій</Link>
+      <section className="card form-card">
+        <div className="eyebrow">Вхід у подію</div>
+        <h1>Приєднатися</h1>
+        <p className="muted">
+          Ви приєднаєтеся як <strong>{user?.name || "ваш профіль"}</strong>. Ім’я повторно вводити не потрібно.
+        </p>
 
-      <form className="form" onSubmit={handleSubmit}>
-        <label>
-          Ваше ім'я
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            minLength="2"
-            required
-          />
-        </label>
+        <form className="form" onSubmit={handleSubmit}>
+          <label>
+            Код події
+            <input
+              className="room-code-input"
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              minLength="6"
+              maxLength="6"
+              required
+            />
+          </label>
 
-        <label>
-          Код кімнати
-          <input
-            className="room-code-input"
-            value={code}
-            onChange={(event) => setCode(event.target.value)}
-            minLength="6"
-            maxLength="6"
-            required
-          />
-        </label>
+          {error && <p className="error">{error}</p>}
 
-        {error && <p className="error">{error}</p>}
-
-        <button className="button primary" disabled={loading}>
-          {loading ? "Вхід..." : "Увійти"}
-        </button>
-      </form>
-    </section>
+          <button className="button primary" disabled={loading || !user}>
+            {loading ? "Приєднання..." : "Приєднатися"}
+          </button>
+        </form>
+      </section>
+    </main>
   );
 }

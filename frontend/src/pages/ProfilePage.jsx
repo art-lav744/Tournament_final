@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api.js";
 import BottomNav from "../components/BottomNav.jsx";
 import {
@@ -11,6 +12,29 @@ function initials(name = "?") {
   return name.trim().slice(0, 2).toUpperCase();
 }
 
+const LOCATION_OPTIONS = [
+  {
+    value: "none",
+    title: "Ніхто",
+    description: "Позиція не надсилається на сервер.",
+  },
+  {
+    value: "friends",
+    title: "Друзі",
+    description: "Вашу актуальну позицію бачать лише прийняті друзі.",
+  },
+  {
+    value: "everyone",
+    title: "Усі",
+    description: "Вашу актуальну позицію можуть бачити й користувачі не з друзів.",
+  },
+];
+
+function currentVisibility(user) {
+  if (!user) return "none";
+  return user.location_visibility || (user.location_sharing_enabled ? "friends" : "none");
+}
+
 export default function ProfilePage() {
   const [user, setUser] = useState(null);
   const [name, setName] = useState("");
@@ -19,6 +43,8 @@ export default function ProfilePage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [connecting, setConnecting] = useState(false);
+  const [savingVisibility, setSavingVisibility] = useState(false);
+  const navigate = useNavigate();
 
   function applyProfile(profile) {
     setUser(profile);
@@ -68,23 +94,21 @@ export default function ProfilePage() {
     }
   }
 
-  async function toggleLocationSharing() {
-    if (!user) return;
+  async function changeLocationVisibility(visibility) {
+    if (!user || savingVisibility || visibility === currentVisibility(user)) return;
 
     setError("");
+    setMessage("");
+    setSavingVisibility(true);
     try {
-      const updated = await api.setLocationSharing(
-        user.id,
-        !user.location_sharing_enabled
-      );
+      const updated = await api.setLocationVisibility(user.id, visibility);
       applyProfile(updated);
-      setMessage(
-        updated.location_sharing_enabled
-          ? "Передачу геолокації увімкнено"
-          : "Передачу геолокації вимкнено"
-      );
+      const option = LOCATION_OPTIONS.find((item) => item.value === visibility);
+      setMessage(`Видимість геолокації: ${option?.title || visibility}`);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSavingVisibility(false);
     }
   }
 
@@ -96,6 +120,16 @@ export default function ProfilePage() {
       setMessage(fallbackMessage);
     }
   }
+
+  function handleSignOut() {
+    localStorage.removeItem("outdoor_user_id");
+    localStorage.removeItem("outdoor_profile_code");
+    localStorage.removeItem("player_name");
+    localStorage.removeItem("outdoor_auth_users");
+    navigate("/login", { replace: true });
+  }
+
+  const visibility = currentVisibility(user);
 
   return (
     <main className="main-tab-page">
@@ -136,21 +170,6 @@ export default function ProfilePage() {
               <small>Введіть його на іншому пристрої. Не передавайте стороннім.</small>
             </button>
 
-            <section className="settings-card">
-              <div>
-                <strong>Ділитися геолокацією</strong>
-                <span>Лише прийняті друзі бачать вашу актуальну позицію.</span>
-              </div>
-              <button
-                type="button"
-                className={`toggle${user.location_sharing_enabled ? " is-on" : ""}`}
-                onClick={toggleLocationSharing}
-                aria-pressed={user.location_sharing_enabled}
-              >
-                <span />
-              </button>
-            </section>
-
             <form className="profile-form" onSubmit={saveProfile}>
               <label>
                 Ім'я
@@ -188,6 +207,12 @@ export default function ProfilePage() {
                 </button>
               </form>
             </section>
+
+            <div style={{ marginTop: 64, marginBottom: 18 }}>
+              <button className="button secondary" type="button" onClick={handleSignOut} style={{ width: "100%", minHeight: 48 }}>
+                Вийти
+              </button>
+            </div>
           </>
         )}
 

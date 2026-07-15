@@ -15,6 +15,7 @@ class ActivityBase(SQLModel):
 class Activity(ActivityBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
     code: str = Field(index=True, unique=True, max_length=6)
+    is_public: bool = True
     created_at: datetime = Field(default_factory=utc_now)
 
 
@@ -22,6 +23,7 @@ class ActivityCreate(ActivityBase):
     user_id: int
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
+    is_public: bool = True
 
 
 class ActivityJoin(SQLModel):
@@ -31,6 +33,7 @@ class ActivityJoin(SQLModel):
 class ActivityRead(ActivityBase):
     id: int
     code: str
+    is_public: bool
     created_at: datetime
     host_user_id: int | None = None
     latitude: float | None = None
@@ -115,6 +118,7 @@ class User(SQLModel, table=True):
     friend_code: str = Field(index=True, unique=True, max_length=8)
     profile_code: str | None = Field(default=None, index=True, max_length=16)
     location_sharing_enabled: bool = True
+    location_visibility: str = Field(default="friends", max_length=20)
     created_at: datetime = Field(default_factory=utc_now)
 
 
@@ -135,6 +139,7 @@ class UserRead(SQLModel):
     friend_code: str
     profile_code: str
     location_sharing_enabled: bool
+    location_visibility: str
     created_at: datetime
 
 
@@ -181,6 +186,10 @@ class LocationUpdate(SQLModel):
 
 class LocationSharingUpdate(SQLModel):
     enabled: bool
+
+
+class LocationVisibilityUpdate(SQLModel):
+    visibility: str = Field(min_length=4, max_length=20)
 
 
 class FriendLocationRead(SQLModel):

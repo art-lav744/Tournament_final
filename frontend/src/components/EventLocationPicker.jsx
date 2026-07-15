@@ -4,6 +4,49 @@ import maplibregl from "maplibre-gl";
 const DEFAULT_CENTER = [24.7111, 48.9226];
 const STYLE_URL = "https://tiles.openfreemap.org/styles/dark";
 
+function hidePlaceLabels(map) {
+  const layers = map.getStyle()?.layers || [];
+
+  for (const layer of layers) {
+    if (layer.type !== "symbol") continue;
+
+    const id = String(layer.id || "").toLowerCase();
+    const sourceLayer = String(layer["source-layer"] || "").toLowerCase();
+    const key = `${id} ${sourceLayer}`;
+
+    const isPlaceLabel =
+      sourceLayer === "place" ||
+      sourceLayer.includes("place") ||
+      key.includes("place_") ||
+      key.includes("place-") ||
+      key.includes("country") ||
+      key.includes("state") ||
+      key.includes("province") ||
+      key.includes("region") ||
+      key.includes("admin1") ||
+      key.includes("city_label") ||
+      key.includes("city-label") ||
+      key.includes("town_label") ||
+      key.includes("town-label") ||
+      key.includes("village_label") ||
+      key.includes("village-label") ||
+      key.includes("suburb") ||
+      key.includes("neighbourhood") ||
+      key.includes("neighborhood") ||
+      key.includes("locality") ||
+      key.includes("district_label") ||
+      key.includes("district-label");
+
+    if (!isPlaceLabel) continue;
+
+    try {
+      map.setLayoutProperty(layer.id, "visibility", "none");
+    } catch {
+      // Ignore style-specific layers.
+    }
+  }
+}
+
 export default function EventLocationPicker({ value, onChange }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -21,6 +64,7 @@ export default function EventLocationPicker({ value, onChange }) {
     });
 
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    map.on("load", () => hidePlaceLabels(map));
 
     function setPoint(lngLat) {
       markerRef.current?.remove();

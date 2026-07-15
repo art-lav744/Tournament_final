@@ -7,7 +7,7 @@ import { ensureCurrentUser } from "../userSession.js";
 export default function CreatePage() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
-  const [form, setForm] = useState({ title: "", description: "" });
+  const [form, setForm] = useState({ title: "", description: "", is_public: true });
   const [location, setLocation] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -81,6 +81,28 @@ export default function CreatePage() {
               rows="3"
             />
           </label>
+
+          <fieldset className="event-privacy-field">
+            <legend>Доступ до події</legend>
+            <div className="event-privacy-options">
+              <button
+                type="button"
+                className={`event-privacy-option${form.is_public ? " is-active" : ""}`}
+                onClick={() => setForm((current) => ({ ...current, is_public: true }))}
+              >
+                <strong>Публічна</strong>
+                <span>Видима у списку публічних подій. Приєднатися може будь-який користувач.</span>
+              </button>
+              <button
+                type="button"
+                className={`event-privacy-option${!form.is_public ? " is-active" : ""}`}
+                onClick={() => setForm((current) => ({ ...current, is_public: false }))}
+              >
+                <strong>Приватна</strong>
+                <span>Не показується у публічному списку. Приєднання лише за кодом.</span>
+              </button>
+            </div>
+          </fieldset>
 
           <div className="event-location-field">
             <span className="event-location-field__label">Точка події</span>

@@ -12,16 +12,45 @@ engine = create_engine(
 def _run_lightweight_sqlite_migrations() -> None:
     """Keep existing hackathon SQLite databases usable after small schema changes."""
     with engine.begin() as connection:
-        columns = {
+        user_columns = {
             row[1]
             for row in connection.execute(text('PRAGMA table_info("user")')).fetchall()
         }
-        if columns and "profile_code" not in columns:
+        if user_columns and "profile_code" not in user_columns:
             connection.execute(text('ALTER TABLE "user" ADD COLUMN profile_code TEXT'))
             connection.execute(
                 text(
                     'CREATE INDEX IF NOT EXISTS ix_user_profile_code '
                     'ON "user" (profile_code)'
+                )
+            )
+
+        if user_columns and "location_visibility" not in user_columns:
+            connection.execute(
+                text(
+                    'ALTER TABLE "user" ADD COLUMN location_visibility '
+                    'TEXT NOT NULL DEFAULT "friends"'
+                )
+            )
+            # Preserve the meaning of the older boolean setting.
+            if "location_sharing_enabled" in user_columns:
+                connection.execute(
+                    text(
+                        'UPDATE "user" SET location_visibility = '
+                        'CASE WHEN location_sharing_enabled = 0 THEN "none" '
+                        'ELSE "friends" END'
+                    )
+                )
+
+        activity_columns = {
+            row[1]
+            for row in connection.execute(text('PRAGMA table_info("activity")')).fetchall()
+        }
+        if activity_columns and "is_public" not in activity_columns:
+            connection.execute(
+                text(
+                    'ALTER TABLE "activity" ADD COLUMN is_public '
+                    'INTEGER NOT NULL DEFAULT 1'
                 )
             )
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api.js";
 import BottomNav from "../components/BottomNav.jsx";
 import {
@@ -43,6 +44,7 @@ export default function ProfilePage() {
   const [error, setError] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [savingVisibility, setSavingVisibility] = useState(false);
+  const navigate = useNavigate();
 
   function applyProfile(profile) {
     setUser(profile);
@@ -119,6 +121,14 @@ export default function ProfilePage() {
     }
   }
 
+  function handleSignOut() {
+    localStorage.removeItem("outdoor_user_id");
+    localStorage.removeItem("outdoor_profile_code");
+    localStorage.removeItem("player_name");
+    localStorage.removeItem("outdoor_auth_users");
+    navigate("/login", { replace: true });
+  }
+
   const visibility = currentVisibility(user);
 
   return (
@@ -160,32 +170,6 @@ export default function ProfilePage() {
               <small>Введіть його на іншому пристрої. Не передавайте стороннім.</small>
             </button>
 
-            <section className="settings-card location-visibility-card">
-              <div className="location-visibility-card__heading">
-                <strong>Хто бачить мою геолокацію</strong>
-                <span>Позиція на карті оновлюється лише коли вебзастосунок активний.</span>
-              </div>
-
-              <div className="segmented-setting" role="radiogroup" aria-label="Видимість геолокації">
-                {LOCATION_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="radio"
-                    aria-checked={visibility === option.value}
-                    className={`segmented-setting__option${
-                      visibility === option.value ? " is-active" : ""
-                    }`}
-                    onClick={() => changeLocationVisibility(option.value)}
-                    disabled={savingVisibility}
-                  >
-                    <strong>{option.title}</strong>
-                    <span>{option.description}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
-
             <form className="profile-form" onSubmit={saveProfile}>
               <label>
                 Ім'я
@@ -223,6 +207,12 @@ export default function ProfilePage() {
                 </button>
               </form>
             </section>
+
+            <div style={{ marginTop: 64, marginBottom: 18 }}>
+              <button className="button secondary" type="button" onClick={handleSignOut} style={{ width: "100%", minHeight: 48 }}>
+                Вийти
+              </button>
+            </div>
           </>
         )}
 
